@@ -2,11 +2,19 @@
   {
     "guid": "4a7f5452-e36b-4c5d-bd87-cd4cd3f5b4dd",
     "name": "VFQ Auto Selector",
-    "description": "Automatically detects and selects French Canadian (VFQ) audio tracks when playing movies or TV shows. Supports all common naming conventions: VFQ, FR-CA, Qu\u00e9b\u00e9cois, Canadien, QC, and more. When multiple VFQ tracks exist, picks the highest quality one (by codec and channel count). Works universally on all clients (Android TV, web, iOS, etc.) by intercepting PlaybackInfo responses server-side.",
+    "description": "Automatically detects and selects French Canadian (VFQ) audio tracks when playing movies or TV shows. Supports all common naming conventions: VFQ, FR-CA, Québécois, Canadien, QC, and more. When multiple VFQ tracks exist, picks the highest quality one (by codec and channel count). Works universally on all clients (Android TV, web, iOS, etc.) by intercepting PlaybackInfo responses server-side.",
     "overview": "Auto-select VFQ/French Canadian audio tracks on playback",
     "owner": "samuelloranger",
     "category": "General",
     "versions": [
+      {
+        "version": "1.0.2.0",
+        "changelog": "Test auto version bump",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/samuelloranger/jellyfin-vfq/releases/download/v1.0.2.0/Jellyfin.Plugin.VFQ_v1.0.2.0.zip",
+        "checksum": "4c053faa47d83d264c9e5752f7963a7e",
+        "timestamp": "2026-03-15T18:11:50Z"
+      },
       {
         "version": "1.0.1.0",
         "changelog": "",
