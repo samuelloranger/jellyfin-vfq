@@ -13,6 +13,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update Directory.Build.props
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cat > Directory.Build.props << EOF
+          <Project>
+              <PropertyGroup>
+                  <Version>${VERSION}</Version>
+                  <AssemblyVersion>${VERSION}</AssemblyVersion>
+                  <FileVersion>${VERSION}</FileVersion>
+              </PropertyGroup>
+          </Project>
+          EOF
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -23,12 +47,72 @@ jobs:
         run: dotnet build --configuration Release
 
       - name: Create plugin zip
+        id: zip
         run: |
+          ZIP_NAME="Jellyfin.Plugin.VFQ_${{ steps.version.outputs.tag }}.zip"
+          ZIP_PATH="Jellyfin.Plugin.VFQ/bin/Release/net9.0/${ZIP_NAME}"
           cd Jellyfin.Plugin.VFQ/bin/Release/net9.0
-          zip -j Jellyfin.Plugin.VFQ_${{ github.ref_name }}.zip Jellyfin.Plugin.VFQ.dll
+          zip -j "$ZIP_NAME" Jellyfin.Plugin.VFQ.dll
+          cd -
+          CHECKSUM=$(md5sum "$ZIP_PATH" | awk '{print $1}')
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+
+      - name: Update manifest.json
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          CHECKSUM="${{ steps.zip.outputs.checksum }}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/Jellyfin.Plugin.VFQ_${TAG}.zip"
+
+          python3 << PYEOF
+          import json
+
+          with open("manifest.json", "r") as f:
+              manifest = json.load(f)
+
+          new_version = {
+              "version": "${VERSION}",
+              "changelog": "",
+              "targetAbi": "10.11.0.0",
+              "sourceUrl": "${SOURCE_URL}",
+              "checksum": "${CHECKSUM}",
+              "timestamp": "${TIMESTAMP}"
+          }
+
+          versions = manifest[0]["versions"]
+
+          # Replace if same version exists, otherwise prepend
+          replaced = False
+          for i, v in enumerate(versions):
+              if v["version"] == "${VERSION}":
+                  # Keep existing changelog if present
+                  new_version["changelog"] = v.get("changelog", "")
+                  versions[i] = new_version
+                  replaced = True
+                  break
+
+          if not replaced:
+              versions.insert(0, new_version)
+
+          with open("manifest.json", "w") as f:
+              json.dump(manifest, f, indent=2)
+              f.write("\n")
+
+          PYEOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: Jellyfin.Plugin.VFQ/bin/Release/net9.0/Jellyfin.Plugin.VFQ_${{ github.ref_name }}.zip
+          files: ${{ steps.zip.outputs.zip_path }}
           generate_release_notes: true
+
+      - name: Commit updated manifest and version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Directory.Build.props manifest.json
+          git diff --cached --quiet || git commit -m "Release ${{ steps.version.outputs.tag }}: update manifest and version"
+          git push origin main
