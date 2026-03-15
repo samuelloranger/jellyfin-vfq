@@ -9,7 +9,7 @@ using MediaBrowser.Model.Serialization;
 namespace Jellyfin.Plugin.VFQ;
 
 /// <summary>
-/// VFQ Auto Audio Selector plugin - automatically selects French Canadian audio tracks.
+/// Jellyfin plugin that automatically selects French Canadian (VFQ) audio tracks.
 /// </summary>
 public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 {
