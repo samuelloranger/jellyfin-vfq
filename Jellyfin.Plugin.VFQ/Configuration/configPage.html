@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VFQ Auto Selector</title>
+</head>
+<body>
+    <div id="VfqAutoSelectorConfigPage" data-role="page"
+         class="page type-interior pluginConfigurationPage"
+         data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <h2>VFQ Auto Selector</h2>
+                <p>Automatically selects French Canadian (VFQ / FR-CA) audio tracks when a movie starts playing.</p>
+
+                <form id="VfqAutoSelectorConfigForm">
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" id="EnableAutoSelect" />
+                            <span>Enable automatic VFQ audio track selection</span>
+                        </label>
+                        <div class="fieldDescription">
+                            When enabled, the plugin will automatically switch to a VFQ audio track
+                            if one is detected when playback starts.
+                        </div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label>
+                            <input is="emby-checkbox" type="checkbox" id="PreferHighestQuality" />
+                            <span>Prefer highest quality VFQ track</span>
+                        </label>
+                        <div class="fieldDescription">
+                            When multiple VFQ tracks exist, prefer the one with the best codec
+                            (TrueHD &gt; DTS-HD MA &gt; FLAC &gt; EAC3 &gt; DTS &gt; AC3 &gt; AAC)
+                            and most channels.
+                        </div>
+                    </div>
+
+                    <h3>Detected Keywords</h3>
+                    <p style="color: #999; margin-bottom: 1em;">
+                        The plugin identifies VFQ tracks by looking for these keywords in audio track titles
+                        and language tags:
+                    </p>
+                    <ul style="color: #999; margin-bottom: 2em;">
+                        <li><strong>VFQ</strong> - Version Française du Québec</li>
+                        <li><strong>FR-CA / FRA-CA / FRE-CA</strong> - French Canadian language codes</li>
+                        <li><strong>Québécois / Quebecois</strong></li>
+                        <li><strong>French Canadian / Français Canadien</strong></li>
+                        <li><strong>QC</strong> - Quebec abbreviation</li>
+                    </ul>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var pluginId = '4a7f5452-e36b-4c5d-bd87-cd4cd3f5b4dd';
+
+            document.querySelector('#VfqAutoSelectorConfigPage')
+                .addEventListener('pageshow', function () {
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        document.querySelector('#EnableAutoSelect').checked = config.EnableAutoSelect;
+                        document.querySelector('#PreferHighestQuality').checked = config.PreferHighestQuality;
+                    });
+                });
+
+            document.querySelector('#VfqAutoSelectorConfigForm')
+                .addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.EnableAutoSelect = document.querySelector('#EnableAutoSelect').checked;
+                        config.PreferHighestQuality = document.querySelector('#PreferHighestQuality').checked;
+                        ApiClient.updatePluginConfiguration(pluginId, config).then(function () {
+                            Dashboard.processPluginConfigurationUpdateResult();
+                        });
+                    });
+                    return false;
+                });
+        </script>
+    </div>
+</body>
+</html>
