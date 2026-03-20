@@ -32,22 +32,6 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
     private readonly IMediaSourceManager _mediaSourceManager;
     private readonly ILogger<VfqAudioSelectorService> _logger;
 
-    private static readonly string[] VfqKeywords =
-    {
-        "vfq",
-        "fr-ca",
-        "fra-ca",
-        "fre-ca",
-        "french canadian",
-        "français canadien",
-        "francais canadien",
-        "québécois",
-        "quebecois",
-        "canadian french",
-        "canadien",
-        "qc",
-    };
-
     private static readonly Dictionary<string, int> CodecRank = new(StringComparer.OrdinalIgnoreCase)
     {
         ["truehd"] = 6,
@@ -126,7 +110,7 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
                 return;
             }
 
-            var vfqTracks = audioStreams.Where(IsVfqTrack).ToList();
+            var vfqTracks = audioStreams.Where(VfqTrackMatcher.IsVfqTrack).ToList();
             if (vfqTracks.Count == 0)
             {
                 return;
@@ -192,7 +176,7 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
             return;
         }
 
-        var vfqTracks = audioStreams.Where(IsVfqTrack).ToList();
+        var vfqTracks = audioStreams.Where(VfqTrackMatcher.IsVfqTrack).ToList();
         if (vfqTracks.Count == 0)
         {
             return;
@@ -227,30 +211,6 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
         }
 
         return vfqTracks.First();
-    }
-
-    private static bool IsVfqTrack(MediaStream stream)
-    {
-        var title = stream.Title ?? string.Empty;
-        var displayTitle = stream.DisplayTitle ?? string.Empty;
-        var language = stream.Language ?? string.Empty;
-
-        foreach (var keyword in VfqKeywords)
-        {
-            if (title.Contains(keyword, StringComparison.OrdinalIgnoreCase)
-                || displayTitle.Contains(keyword, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        if (language.Contains("-ca", StringComparison.OrdinalIgnoreCase)
-            || language.Contains("_ca", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return false;
     }
 
     private static int GetCodecRank(MediaStream stream)

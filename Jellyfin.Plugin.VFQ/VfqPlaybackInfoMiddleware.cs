@@ -21,22 +21,6 @@ public class VfqPlaybackInfoMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<VfqPlaybackInfoMiddleware> _logger;
 
-    private static readonly string[] VfqKeywords =
-    {
-        "vfq",
-        "fr-ca",
-        "fra-ca",
-        "fre-ca",
-        "french canadian",
-        "français canadien",
-        "francais canadien",
-        "québécois",
-        "quebecois",
-        "canadian french",
-        "canadien",
-        "qc",
-    };
-
     private static readonly Dictionary<string, int> CodecRank = new(StringComparer.OrdinalIgnoreCase)
     {
         ["truehd"] = 6,
@@ -159,7 +143,7 @@ public class VfqPlaybackInfoMiddleware
                 var language = stream["Language"]?.GetValue<string>() ?? string.Empty;
                 var index = stream["Index"]?.GetValue<int>() ?? -1;
 
-                if (index < 0 || !IsVfqTrack(title, displayTitle, language))
+                if (index < 0 || !VfqTrackMatcher.IsVfqTrack(title, displayTitle, language))
                 {
                     continue;
                 }
@@ -203,21 +187,6 @@ public class VfqPlaybackInfoMiddleware
         }
 
         return modified;
-    }
-
-    private static bool IsVfqTrack(string title, string displayTitle, string language)
-    {
-        foreach (var keyword in VfqKeywords)
-        {
-            if (title.Contains(keyword, StringComparison.OrdinalIgnoreCase)
-                || displayTitle.Contains(keyword, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return language.Contains("-ca", StringComparison.OrdinalIgnoreCase)
-            || language.Contains("_ca", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int GetCodecRankValue(string? codec, string? profile)
