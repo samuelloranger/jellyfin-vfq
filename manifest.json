@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "1.0.3.0",
+        "changelog": "Detect Francais (Canada) VFQ tracks",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/samuelloranger/jellyfin-vfq/releases/download/v1.0.3.0/Jellyfin.Plugin.VFQ_v1.0.3.0.zip",
+        "checksum": "d85dd398c2d54dfbf9ede070af235093",
+        "timestamp": "2026-03-20T14:49:48Z"
+      },
+      {
         "version": "1.0.2.0",
         "changelog": "Test auto version bump",
         "targetAbi": "10.11.0.0",
