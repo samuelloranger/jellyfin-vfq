@@ -100,17 +100,20 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
                 return;
             }
 
-            var mediaStreams = e.Item?.GetMediaStreams();
-            if (mediaStreams is null || mediaStreams.Count == 0)
+            if (e.Item is null || string.IsNullOrEmpty(e.MediaSourceId))
             {
                 return;
             }
 
-            var audioStreams = mediaStreams
+            var mediaSource = await _mediaSourceManager
+                .GetMediaSource(e.Item, e.MediaSourceId, null, false, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            var audioStreams = mediaSource?.MediaStreams?
                 .Where(s => s.Type == MediaStreamType.Audio)
                 .ToList();
 
-            if (audioStreams.Count == 0)
+            if (audioStreams is null || audioStreams.Count == 0)
             {
                 return;
             }
