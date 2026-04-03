@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "1.0.5.0",
+        "changelog": "Fix MissingMethodException by replacing removed GetMediaStreams() API",
+        "targetAbi": "10.11.7.0",
+        "sourceUrl": "https://github.com/samuelloranger/jellyfin-vfq/releases/download/v1.0.5.0/Jellyfin.Plugin.VFQ_v1.0.5.0.zip",
+        "checksum": "1017126e67c37ab179bc6028e219f79f",
+        "timestamp": "2026-04-03T12:06:26Z"
+      },
+      {
         "version": "1.0.4.0",
         "changelog": "Bump version and fix dotnet version",
         "targetAbi": "10.11.7.0",
