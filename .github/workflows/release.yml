@@ -97,7 +97,7 @@ jobs:
           new_version = {
               "version": "${VERSION}",
               "changelog": "${COMMIT_MSG}",
-              "targetAbi": "10.11.0.0",
+              "targetAbi": "10.11.7.0",
               "sourceUrl": "${SOURCE_URL}",
               "checksum": "${CHECKSUM}",
               "timestamp": "${TIMESTAMP}"

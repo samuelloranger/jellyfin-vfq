@@ -1,8 +1,8 @@
 name: "VFQ Auto Selector"
 guid: "4a7f5452-e36b-4c5d-bd87-cd4cd3f5b4dd"
 version: "1.0.0.0"
-targetAbi: "10.10.0.0"
-framework: "net8.0"
+targetAbi: "10.11.7.0"
+framework: "net9.0"
 overview: "Automatically selects VFQ (French Canadian) audio tracks on playback"
 description: >
   Detects and automatically switches to French Canadian (VFQ/FR-CA/Québécois)

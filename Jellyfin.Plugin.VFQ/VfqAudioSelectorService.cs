@@ -77,6 +77,11 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
     {
         try
         {
+            // Wait briefly so PlayState.AudioStreamIndex is populated before we check it.
+            // Without this, the session may not yet reflect the client's actual audio selection,
+            // causing a redundant SetAudioStreamIndex command that interrupts early playback.
+            await Task.Delay(750).ConfigureAwait(false);
+
             var config = Plugin.Instance?.Configuration;
             if (config is null || !config.EnableAutoSelect)
             {
