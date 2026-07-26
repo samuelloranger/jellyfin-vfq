@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+      - name: Restore
+        run: dotnet restore Jellyfin.Plugin.VFQ.sln
+      - name: Verify formatting
+        run: dotnet format Jellyfin.Plugin.VFQ.sln --verify-no-changes --no-restore
+      - name: Build
+        run: dotnet build Jellyfin.Plugin.VFQ.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.VFQ.sln --configuration Release --no-build
