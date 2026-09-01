@@ -1,0 +1,130 @@
+name: Jellyfin Compatibility
+
+# GitHub cannot trigger a workflow from a release in a repository you do not
+# control, so this polls instead. The poll is stateless: it compares the newest
+# published Jellyfin.Controller package against the JellyfinVersion pinned in
+# the csproj, which is the version the plugin is actually released against.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      jellyfin_version:
+        description: 'Jellyfin NuGet version to test against (blank = newest published)'
+        required: false
+        type: string
+      force:
+        description: 'Run even when the newest version already matches the pin'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      pinned: ${{ steps.check.outputs.pinned }}
+      latest: ${{ steps.check.outputs.latest }}
+      docker_tag: ${{ steps.check.outputs.docker_tag }}
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve versions
+        id: check
+        run: |
+          scripts/resolve-jellyfin-version.py \
+            --requested '${{ inputs.jellyfin_version }}' >> "$GITHUB_OUTPUT"
+
+          # Re-read what the resolver decided so the summary and gate agree with it.
+          eval "$(scripts/resolve-jellyfin-version.py --requested '${{ inputs.jellyfin_version }}')"
+
+          if [ "$changed" = "false" ] && [ "${{ inputs.force }}" != "true" ] \
+             && [ "${{ github.event_name }}" = "schedule" ]; then
+            SHOULD_RUN=false
+          else
+            SHOULD_RUN=true
+          fi
+          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Jellyfin compatibility"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Released against | \`$pinned\` |"
+            echo "| Newest published | \`$latest\` |"
+            echo "| Image | \`jellyfin/jellyfin:$docker_tag\` |"
+            echo "| Newer than the pin | $changed |"
+            echo "| Validating | $SHOULD_RUN |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    needs: resolve
+    if: needs.resolve.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build against Jellyfin ${{ needs.resolve.outputs.latest }}
+        run: |
+          dotnet build Jellyfin.Plugin.VFQ.sln --configuration Release \
+            -p:JellyfinVersion=${{ needs.resolve.outputs.latest }} \
+            -p:TreatWarningsAsErrors=true
+
+      # A build against the new package proves the plugin still compiles. It does
+      # not prove the plugin loads: a removed method only throws at runtime, which
+      # is how 1.0.5.0 broke. The smoke test boots the real server and asserts the
+      # actual PlaybackInfo response.
+      - name: Smoke test on jellyfin/jellyfin:${{ needs.resolve.outputs.docker_tag }}
+        run: ./scripts/smoke-test.sh "${{ needs.resolve.outputs.docker_tag }}"
+
+  report:
+    needs: [resolve, validate]
+    if: always() && needs.resolve.outputs.should_run == 'true' && needs.validate.result != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST: ${{ needs.resolve.outputs.latest }}
+          PINNED: ${{ needs.resolve.outputs.pinned }}
+          DOCKER_TAG: ${{ needs.resolve.outputs.docker_tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Plugin fails against Jellyfin ${LATEST}"
+          BODY=$(cat <<EOF
+          Validation against a newer Jellyfin failed.
+
+          | | |
+          |---|---|
+          | Released against | \`${PINNED}\` |
+          | Failing version | \`${LATEST}\` |
+          | Image | \`jellyfin/jellyfin:${DOCKER_TAG}\` |
+
+          [Failing run](${RUN_URL})
+
+          Published releases are unaffected — they are still built against \`${PINNED}\`.
+          Fix before bumping \`JellyfinVersion\` in \`Jellyfin.Plugin.VFQ/Jellyfin.Plugin.VFQ.csproj\`.
+          EOF
+          )
+
+          # Reuse the open issue for this version rather than filing one per week.
+          EXISTING=$(gh issue list --state open --label jellyfin-compat \
+            --search "in:title $TITLE" --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "Still failing as of [this run](${RUN_URL})."
+          else
+            gh label create jellyfin-compat --color B60205 \
+              --description "Forward-compatibility failures against a newer Jellyfin" 2>/dev/null || true
+            gh issue create --title "$TITLE" --label jellyfin-compat --body "$BODY"
+          fi

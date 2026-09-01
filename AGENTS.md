@@ -15,7 +15,37 @@ Build and release are performed by the GitHub pipeline defined in `.github/workf
 
 CI packages `Jellyfin.Plugin.VFQ.dll` into a zip and updates `manifest.json` plus `Directory.Build.props` on pushes to `main`. New manifest entries are written with `targetAbi: 12.0.0.0`. The release line (`MAJOR.MINOR`) is read from `Directory.Build.props`; CI only bumps the patch within that line, so starting a new line means editing that file.
 
-When Jellyfin 12.0.0 goes stable, bump the two `PackageReference` versions in `Jellyfin.Plugin.VFQ.csproj` from `12.0.0-rc7` to `12.0.0` and re-verify against the GA server before releasing. `targetAbi` stays `12.0.0.0` either way.
+### Jellyfin version pin
+
+`Jellyfin.Plugin.VFQ.csproj` declares `<JellyfinVersion>`, which both `PackageReference`s consume. It is the single place the released-against Jellyfin version lives, and it is overridable:
+
+```bash
+dotnet build Jellyfin.Plugin.VFQ.sln -c Release -p:JellyfinVersion=12.0.0
+```
+
+When Jellyfin 12.0.0 goes stable, bump `<JellyfinVersion>` from `12.0.0-rc7` to `12.0.0` and re-verify before releasing. `targetAbi` stays `12.0.0.0` either way.
+
+### Forward-compatibility checks
+
+GitHub cannot trigger a workflow from a release in a repository you do not control, so `.github/workflows/jellyfin-compat.yml` polls instead. It runs Mondays at 06:00 UTC and on manual dispatch.
+
+`scripts/resolve-jellyfin-version.py` compares `<JellyfinVersion>` against the newest published `Jellyfin.Controller` on NuGet. The comparison is stateless — no cache, no committed marker. Scheduled runs stop early when the two match; dispatch runs accept a `jellyfin_version` input and a `force` flag. The resolver rejects prerelease tags outside `alpha|beta|rc` + digits, because `jellyfin.controller` carries a malformed `12.0.0-rcrc3` that sorts above `12.0.0-rc7` under SemVer prerelease ordering. Run it directly to see what it would pick:
+
+```bash
+scripts/resolve-jellyfin-version.py          # pinned, latest, docker tag, changed
+scripts/resolve-jellyfin-version.py --list   # every candidate, newest first
+```
+
+When a newer Jellyfin exists the workflow builds against it and then runs `scripts/smoke-test.sh <docker-tag>`, which boots that Jellyfin in Docker, installs the built plugin, and asserts the PlaybackInfo response. A build alone would not catch a removed method — that only throws at plugin load, which is how 1.0.5.0 broke. On failure the workflow opens (or comments on) an issue labelled `jellyfin-compat`. Published releases are unaffected; they stay built against the pin.
+
+Run the smoke test locally against any tag:
+
+```bash
+dotnet build Jellyfin.Plugin.VFQ.sln -c Release
+scripts/smoke-test.sh 12.0-rc7
+```
+
+It needs `docker`, `ffmpeg`, `curl` and `python3`, generates its own two-audio-track test file, and cleans up its container and temp directory on exit. It asserts a negative control — with `EnableAutoSelect` off, Jellyfin's own default must win — so the test cannot pass by accident if Jellyfin ever starts picking VFQ itself.
 
 ## Coding Style & Naming Conventions
 Follow the existing C# style: 4-space indentation, file-scoped namespaces, nullable reference types enabled, and implicit usings left on. Use `PascalCase` for public types and members, `_camelCase` for private fields, and keep plugin-specific classes prefixed with `Vfq` when they implement VFQ behavior. Preserve XML documentation on public APIs and keep logging messages explicit about playback decisions.

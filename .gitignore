@@ -5,3 +5,7 @@ obj/
 *.suo
 *.nupkg
 *.zip
+
+# Python bytecode from scripts/
+__pycache__/
+*.pyc

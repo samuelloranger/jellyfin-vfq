@@ -7,13 +7,18 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- The Jellyfin version the plugin is released against. Overridable so the
+         forward-compatibility workflow can build against a newer Jellyfin
+         without editing this file: dotnet build -p:JellyfinVersion=12.0.0 -->
+    <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.0.0-rc7</JellyfinVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Jellyfin.Controller" Version="12.0.0-rc7">
+    <PackageReference Include="Jellyfin.Controller" Version="$(JellyfinVersion)">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Model" Version="12.0.0-rc7">
+    <PackageReference Include="Jellyfin.Model" Version="$(JellyfinVersion)">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
