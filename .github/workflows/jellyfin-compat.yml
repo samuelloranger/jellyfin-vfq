@@ -6,7 +6,11 @@ name: Jellyfin Compatibility
 # the csproj, which is the version the plugin is actually released against.
 on:
   schedule:
-    - cron: '0 6 * * 1'
+    # UTC, and off the hour on purpose: scheduled runs are best-effort and the
+    # top of the hour is the most contended slot, so it is the most likely to be
+    # delayed or dropped. Note that GitHub only runs schedules from the default
+    # branch, and disables them after 60 days without repository activity.
+    - cron: '23 6 * * 1'
   workflow_dispatch:
     inputs:
       jellyfin_version:

@@ -27,7 +27,15 @@ When Jellyfin 12.0.0 goes stable, bump `<JellyfinVersion>` from `12.0.0-rc7` to 
 
 ### Forward-compatibility checks
 
-GitHub cannot trigger a workflow from a release in a repository you do not control, so `.github/workflows/jellyfin-compat.yml` polls instead. It runs Mondays at 06:00 UTC and on manual dispatch.
+GitHub cannot trigger a workflow from a release in a repository you do not control — `repository_dispatch` would have to be sent by `jellyfin/jellyfin`, and webhooks need admin rights there. So `.github/workflows/jellyfin-compat.yml` polls instead, on `schedule` plus manual dispatch.
+
+Three things about GitHub's cron that affect this workflow:
+
+- **Schedules run only from the default branch.** The workflow does nothing on a schedule while it lives on a feature branch; it is dispatch-only until merged to `main`.
+- **Delivery is best-effort.** Runs queue and can be delayed or skipped under load, so the cron sits at `23 6 * * 1` rather than on the hour, which is the most contended slot. A skipped weekly run is harmless here.
+- **Schedules auto-disable after 60 days without repository activity** on public repos. GitHub emails a warning; any push resets the clock. Worth knowing for a plugin that goes quiet between Jellyfin releases — the check can stop without failing.
+
+Times are UTC and do not follow DST. The `@daily` and `@weekly` shorthands are not supported, and the shortest interval is 5 minutes.
 
 `scripts/resolve-jellyfin-version.py` compares `<JellyfinVersion>` against the newest published `Jellyfin.Controller` on NuGet. The comparison is stateless — no cache, no committed marker. Scheduled runs stop early when the two match; dispatch runs accept a `jellyfin_version` input and a `force` flag. The resolver rejects prerelease tags outside `alpha|beta|rc` + digits, because `jellyfin.controller` carries a malformed `12.0.0-rcrc3` that sorts above `12.0.0-rc7` under SemVer prerelease ordering. Run it directly to see what it would pick:
 
