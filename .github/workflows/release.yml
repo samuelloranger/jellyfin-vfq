@@ -25,25 +25,25 @@ jobs:
       - name: Determine next version
         id: version
         run: |
-          # Get the latest version tag, default to v0.0.0.0 if none.
-          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          # Directory.Build.props owns the release line (MAJOR.MINOR); tags own the patch.
+          # The Jellyfin 12 line is 2.x; the Jellyfin 10.11 line stopped at 1.0.5.0.
+          BASE=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)
+          IFS='.' read -r MAJOR MINOR _ _ <<< "$BASE"
+
+          LATEST_TAG=$(git tag -l "v${MAJOR}.${MINOR}.*" --sort=-v:refname | head -n1)
           if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v0.0.0.0"
+            NEW_VERSION="${MAJOR}.${MINOR}.0.0"
+          else
+            VERSION="${LATEST_TAG#v}"
+            IFS='.' read -r _ _ PATCH REV <<< "$VERSION"
+            PATCH=$((PATCH + 1))
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}.${REV}"
           fi
-          echo "Latest tag: $LATEST_TAG"
-
-          # Parse version parts: major.minor.patch.revision
-          VERSION="${LATEST_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH REV <<< "$VERSION"
-
-          # Bump patch
-          PATCH=$((PATCH + 1))
-          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}.${REV}"
           NEW_TAG="v${NEW_VERSION}"
 
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
-          echo "Bumping: $LATEST_TAG -> $NEW_TAG"
+          echo "Release line ${MAJOR}.${MINOR}: ${LATEST_TAG:-<none>} -> $NEW_TAG"
 
       - name: Update Directory.Build.props
         run: |
@@ -61,7 +61,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Build
         run: dotnet build --configuration Release
@@ -71,8 +71,8 @@ jobs:
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           ZIP_NAME="Jellyfin.Plugin.VFQ_${TAG}.zip"
-          ZIP_PATH="Jellyfin.Plugin.VFQ/bin/Release/net9.0/${ZIP_NAME}"
-          cd Jellyfin.Plugin.VFQ/bin/Release/net9.0
+          ZIP_PATH="Jellyfin.Plugin.VFQ/bin/Release/net10.0/${ZIP_NAME}"
+          cd Jellyfin.Plugin.VFQ/bin/Release/net10.0
           zip -j "$ZIP_NAME" Jellyfin.Plugin.VFQ.dll
           cd -
           CHECKSUM=$(md5sum "$ZIP_PATH" | awk '{print $1}')
@@ -81,26 +81,26 @@ jobs:
 
       - name: Update manifest.json
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          TAG="${{ steps.version.outputs.tag }}"
-          CHECKSUM="${{ steps.zip.outputs.checksum }}"
-          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/Jellyfin.Plugin.VFQ_${TAG}.zip"
-          COMMIT_MSG=$(git log -1 --pretty=%s)
+          export VERSION="${{ steps.version.outputs.version }}"
+          export CHECKSUM="${{ steps.zip.outputs.checksum }}"
+          export TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          export SOURCE_URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/Jellyfin.Plugin.VFQ_${{ steps.version.outputs.tag }}.zip"
+          export COMMIT_MSG=$(git log -1 --pretty=%s)
 
-          python3 << PYEOF
+          python3 << 'PYEOF'
           import json
+          import os
 
           with open("manifest.json", "r") as f:
               manifest = json.load(f)
 
           new_version = {
-              "version": "${VERSION}",
-              "changelog": "${COMMIT_MSG}",
-              "targetAbi": "10.11.7.0",
-              "sourceUrl": "${SOURCE_URL}",
-              "checksum": "${CHECKSUM}",
-              "timestamp": "${TIMESTAMP}"
+              "version": os.environ["VERSION"],
+              "changelog": os.environ["COMMIT_MSG"],
+              "targetAbi": "12.0.0.0",
+              "sourceUrl": os.environ["SOURCE_URL"],
+              "checksum": os.environ["CHECKSUM"],
+              "timestamp": os.environ["TIMESTAMP"],
           }
 
           manifest[0]["versions"].insert(0, new_version)
