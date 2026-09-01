@@ -16,15 +16,11 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.VFQ;
 
 /// <summary>
-/// Hosted service that overrides the default audio stream selection in Jellyfin
-/// to prefer VFQ (French Canadian) audio tracks. Uses two complementary strategies:
-///
-/// 1. Patches <c>SetDefaultAudioAndSubtitleStreamIndices</c> on the resolved
-///    <see cref="IMediaSourceManager"/> so that PlaybackInfo responses already
-///    contain the correct default — works for ALL clients before playback starts.
-///
-/// 2. Listens to <c>PlaybackStart</c> as a fallback and sends a
-///    <c>SetAudioStreamIndex</c> command to the client session.
+/// Fallback strategy for VFQ (French Canadian) audio selection. The primary path is
+/// <see cref="VfqPlaybackInfoMiddleware"/>, which rewrites the PlaybackInfo response
+/// before any client sees it. This service listens to <c>PlaybackStart</c> and, when the
+/// session did not end up on a VFQ track, sends a <c>SetAudioStreamIndex</c> command to
+/// the client session.
 /// </summary>
 public class VfqAudioSelectorService : IHostedService, IDisposable
 {

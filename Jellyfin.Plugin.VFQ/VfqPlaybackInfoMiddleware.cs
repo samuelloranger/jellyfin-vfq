@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
 
 namespace Jellyfin.Plugin.VFQ;
 
@@ -63,44 +64,57 @@ public class VfqPlaybackInfoMiddleware
             return;
         }
 
+        // Jellyfin registers UseResponseCompression() downstream of this middleware,
+        // so without this the buffer below would capture gzip/brotli bytes instead of
+        // JSON and the patch would silently no-op. PlaybackInfo payloads are small.
+        var originalAcceptEncoding = context.Request.Headers.AcceptEncoding;
+        context.Request.Headers.AcceptEncoding = StringValues.Empty;
+
         // Capture the response body.
         var originalBodyStream = context.Response.Body;
         using var memoryStream = new MemoryStream();
         context.Response.Body = memoryStream;
 
-        await _next(context).ConfigureAwait(false);
-
-        memoryStream.Seek(0, SeekOrigin.Begin);
-
-        if (context.Response.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true
-            && context.Response.StatusCode == 200)
+        try
         {
-            try
+            await _next(context).ConfigureAwait(false);
+
+            memoryStream.Seek(0, SeekOrigin.Begin);
+
+            if (context.Response.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true
+                && context.Response.StatusCode == 200)
             {
-                var json = await JsonNode.ParseAsync(memoryStream).ConfigureAwait(false);
-                if (json is not null && PatchMediaSources(json))
+                try
                 {
-                    memoryStream.SetLength(0);
-                    using var writer = new Utf8JsonWriter(memoryStream);
-                    json.WriteTo(writer);
-                    await writer.FlushAsync().ConfigureAwait(false);
+                    var json = await JsonNode.ParseAsync(memoryStream).ConfigureAwait(false);
+                    if (json is not null && PatchMediaSources(json))
+                    {
+                        memoryStream.SetLength(0);
+                        using var writer = new Utf8JsonWriter(memoryStream);
+                        json.WriteTo(writer);
+                        await writer.FlushAsync().ConfigureAwait(false);
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Not valid JSON — pass through unchanged.
                 }
             }
-            catch (JsonException)
-            {
-                // Not valid JSON — pass through unchanged.
-            }
-        }
 
-        memoryStream.Seek(0, SeekOrigin.Begin);
-        context.Response.ContentLength = memoryStream.Length;
-        await memoryStream.CopyToAsync(originalBodyStream).ConfigureAwait(false);
-        context.Response.Body = originalBodyStream;
+            memoryStream.Seek(0, SeekOrigin.Begin);
+            context.Response.ContentLength = memoryStream.Length;
+            await memoryStream.CopyToAsync(originalBodyStream).ConfigureAwait(false);
+        }
+        finally
+        {
+            context.Response.Body = originalBodyStream;
+            context.Request.Headers.AcceptEncoding = originalAcceptEncoding;
+        }
     }
 
     private bool PatchMediaSources(JsonNode root)
     {
-        var mediaSources = root["MediaSources"]?.AsArray();
+        var mediaSources = GetProp(root, "MediaSources")?.AsArray();
         if (mediaSources is null)
         {
             return false;
@@ -117,7 +131,7 @@ public class VfqPlaybackInfoMiddleware
                 continue;
             }
 
-            var streams = source["MediaStreams"]?.AsArray();
+            var streams = GetProp(source, "MediaStreams")?.AsArray();
             if (streams is null)
             {
                 continue;
@@ -132,16 +146,16 @@ public class VfqPlaybackInfoMiddleware
                     continue;
                 }
 
-                var type = stream["Type"]?.GetValue<string>();
-                if (type != "Audio")
+                var type = GetProp(stream, "Type")?.GetValue<string>();
+                if (!string.Equals(type, "Audio", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                var title = stream["Title"]?.GetValue<string>() ?? string.Empty;
-                var displayTitle = stream["DisplayTitle"]?.GetValue<string>() ?? string.Empty;
-                var language = stream["Language"]?.GetValue<string>() ?? string.Empty;
-                var index = stream["Index"]?.GetValue<int>() ?? -1;
+                var title = GetProp(stream, "Title")?.GetValue<string>() ?? string.Empty;
+                var displayTitle = GetProp(stream, "DisplayTitle")?.GetValue<string>() ?? string.Empty;
+                var language = GetProp(stream, "Language")?.GetValue<string>() ?? string.Empty;
+                var index = GetProp(stream, "Index")?.GetValue<int>() ?? -1;
 
                 if (index < 0 || !VfqTrackMatcher.IsVfqTrack(title, displayTitle, language))
                 {
@@ -151,9 +165,9 @@ public class VfqPlaybackInfoMiddleware
                 vfqTracks.Add((
                     index,
                     title.Length > 0 ? title : displayTitle,
-                    stream["Codec"]?.GetValue<string>(),
-                    stream["Profile"]?.GetValue<string>(),
-                    stream["Channels"]?.GetValue<int>() ?? 0));
+                    GetProp(stream, "Codec")?.GetValue<string>(),
+                    GetProp(stream, "Profile")?.GetValue<string>(),
+                    GetProp(stream, "Channels")?.GetValue<int>() ?? 0));
             }
 
             if (vfqTracks.Count == 0)
@@ -168,7 +182,7 @@ public class VfqPlaybackInfoMiddleware
                     .First()
                 : vfqTracks.First();
 
-            var currentDefault = source["DefaultAudioStreamIndex"]?.GetValue<int>();
+            var currentDefault = GetProp(source, "DefaultAudioStreamIndex")?.GetValue<int>();
             if (currentDefault == best.Index)
             {
                 continue;
@@ -182,11 +196,61 @@ public class VfqPlaybackInfoMiddleware
                 best.Codec,
                 best.Channels);
 
-            source["DefaultAudioStreamIndex"] = best.Index;
+            source[ResolveKey(source, "DefaultAudioStreamIndex")] = best.Index;
             modified = true;
         }
 
         return modified;
+    }
+
+    /// <summary>
+    /// Reads a property, tolerating either casing. Jellyfin serializes PascalCase by
+    /// default but will emit camelCase when a client asks for the
+    /// <c>application/json; profile="CamelCase"</c> output formatter.
+    /// </summary>
+    private static JsonNode? GetProp(JsonNode? node, string name)
+    {
+        if (node is not JsonObject obj)
+        {
+            return null;
+        }
+
+        if (obj.TryGetPropertyValue(name, out var exact))
+        {
+            return exact;
+        }
+
+        foreach (var pair in obj)
+        {
+            if (string.Equals(pair.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return pair.Value;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the key actually present on the object so writes replace the existing
+    /// property instead of adding a second one with the wrong casing.
+    /// </summary>
+    private static string ResolveKey(JsonNode node, string name)
+    {
+        if (node is not JsonObject obj || obj.ContainsKey(name))
+        {
+            return name;
+        }
+
+        foreach (var pair in obj)
+        {
+            if (string.Equals(pair.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return pair.Key;
+            }
+        }
+
+        return name;
     }
 
     private static int GetCodecRankValue(string? codec, string? profile)
