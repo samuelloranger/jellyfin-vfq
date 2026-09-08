@@ -31,9 +31,21 @@ If multiple matching VFQ tracks exist, it selects the highest quality track base
 
 ---
 
+## 📦 Installation
+
+Add the plugin repository in Jellyfin under **Dashboard → Plugins → Repositories**:
+
+```
+https://raw.githubusercontent.com/samuelloranger/jellyfin-vfq/main/manifest.json
+```
+
+Jellyfin discards manifest entries whose `targetAbi` is newer than the running server, so a 10.11 server is only ever offered 1.x builds and a Jellyfin 12 server is offered 2.x.
+
+---
+
 ## 🛠️ Build and Development
 
-The plugin requires the **.NET 9 SDK** to build.
+Requires the **.NET 10 SDK** to build. Built against `Jellyfin.Controller` `12.0.0-rc7`.
 
 ### Restore Dependencies
 ```bash
