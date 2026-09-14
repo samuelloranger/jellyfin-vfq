@@ -9,6 +9,8 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/samuelloranger/jellyfin-vfq/releases/latest"><img src="https://img.shields.io/github/v/release/samuelloranger/jellyfin-vfq?label=release" alt="Latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/samuelloranger/jellyfin-vfq" alt="License: MIT" /></a>
   <a href="https://buymeacoffee.com/samlo122"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" alt="Buy me a coffee" /></a>
 </p>
 
@@ -66,3 +68,13 @@ dotnet build Jellyfin.Plugin.VFQ.sln -c Release
 ```bash
 dotnet clean Jellyfin.Plugin.VFQ.sln
 ```
+
+---
+
+## 📄 License
+
+Released under the [MIT License](LICENSE).
+
+## 👤 Author
+
+Built by [Samuel Loranger](https://samlo.cloud) — more homelab projects at [samlo.cloud](https://samlo.cloud).
