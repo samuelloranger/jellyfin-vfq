@@ -77,6 +77,13 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # The smoke test builds a two-track test file with the host ffmpeg, which is
+      # no longer preinstalled on the runner image.
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
       - name: Build against Jellyfin ${{ needs.resolve.outputs.latest }}
         run: |
           dotnet build Jellyfin.Plugin.VFQ.sln --configuration Release \
@@ -98,6 +105,8 @@ jobs:
       - name: Open or update the tracking issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job has no checkout, so gh cannot infer the repo from a git remote.
+          GH_REPO: ${{ github.repository }}
           LATEST: ${{ needs.resolve.outputs.latest }}
           PINNED: ${{ needs.resolve.outputs.pinned }}
           DOCKER_TAG: ${{ needs.resolve.outputs.docker_tag }}

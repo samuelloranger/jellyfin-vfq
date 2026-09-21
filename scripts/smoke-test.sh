@@ -24,6 +24,10 @@ BASE="http://localhost:${PORT}"
 log()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 fail() { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
 
+# Defined up here so the cleanup trap can dump the server log even when the run
+# aborts before the container is started.
+server_log() { docker logs "$CONTAINER" 2>&1 || true; }
+
 cleanup() {
   local code=$?
   if [ $code -ne 0 ]; then
@@ -86,9 +90,8 @@ docker run -d --name "$CONTAINER" -p "${PORT}:8096" \
 # Gate on the log line instead, and bail out early if the container dies.
 # Never pipe `docker logs` into `grep -q`: grep exits on the first match, docker
 # takes SIGPIPE, and under `set -o pipefail` the successful match reads as a
-# failed pipeline. Capture the log and match in-process instead.
-server_log() { docker logs "$CONTAINER" 2>&1 || true; }
-
+# failed pipeline. Capture the log and match in-process instead. (server_log is
+# defined near the top so the cleanup trap can use it.)
 log_contains() {
   case "$(server_log)" in
     *"$1"*) return 0 ;;
@@ -162,11 +165,16 @@ log "Adding the library and waiting for the scan"
      -d '{"LibraryOptions":{"PathInfos":[{"Path":"/media"}],"EnableRealtimeMonitor":false,"MetadataCountryCode":"CA"}}')" = 204 ] \
   || fail "adding the library failed"
 
+# The refreshLibrary=true above kicks a single scan, and with no automatic
+# refresh interval nothing re-scans. If that one scan races the freshly added
+# library and finds nothing, the movie never appears — so re-trigger a scan
+# every few polls rather than waiting on the initial one alone.
 ITEM_ID=""
-for _ in $(seq 1 60); do
+for i in $(seq 1 60); do
   ITEM_ID=$(curl -s "$BASE/Items?userId=${USER_ID}&recursive=true&includeItemTypes=Movie" -H "$TAUTH" \
     | python3 -c 'import json,sys;i=json.load(sys.stdin)["Items"];print(i[0]["Id"] if i else "")')
   [ -n "$ITEM_ID" ] && break
+  [ $((i % 5)) -eq 0 ] && api -X POST "$BASE/Library/Refresh" -H "$TAUTH" >/dev/null
   sleep 3
 done
 [ -n "$ITEM_ID" ] || fail "the test movie never appeared in the library"
