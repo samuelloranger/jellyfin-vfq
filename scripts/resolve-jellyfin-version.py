@@ -44,11 +44,20 @@ def parse(version):
 
 
 def docker_tag(version):
-    """12.0.0-rc7 ships as the 12.0-rc7 image; 12.0.1 ships as 12.0.1."""
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)-(.+)", version)
+    """Maps a NuGet version to the Jellyfin Docker Hub tag.
+
+    Jellyfin publishes stable images under the MAJOR.MINOR tag (12.1.0 -> 12.1),
+    which rolls forward to the newest patch of that line, and prereleases under
+    MAJOR.MINOR-channel (12.0.0-rc7 -> 12.0-rc7). There is no MAJOR.MINOR.PATCH
+    stable tag, so the full version must not be passed through unchanged.
+    """
+    match = re.fullmatch(r"(\d+)\.(\d+)\.\d+(?:\.\d+)?(?:-(.+))?", version)
     if match is None:
         return version
-    return f"{match.group(1)}.{match.group(2)}-{match.group(4)}"
+    major, minor, prerelease = match.groups()
+    if prerelease:
+        return f"{major}.{minor}-{prerelease}"
+    return f"{major}.{minor}"
 
 
 def newest(versions):
