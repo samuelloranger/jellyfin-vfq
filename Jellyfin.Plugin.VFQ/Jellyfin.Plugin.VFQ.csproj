@@ -10,8 +10,8 @@
 
     <!-- The Jellyfin version the plugin is released against. Overridable so the
          forward-compatibility workflow can build against a newer Jellyfin
-         without editing this file: dotnet build -p:JellyfinVersion=12.0.0 -->
-    <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.0.0</JellyfinVersion>
+         without editing this file: dotnet build -p:JellyfinVersion=12.1.0 -->
+    <JellyfinVersion Condition="'$(JellyfinVersion)' == ''">12.1.0</JellyfinVersion>
   </PropertyGroup>
 
   <ItemGroup>
