@@ -47,7 +47,7 @@ Jellyfin discards manifest entries whose `targetAbi` is newer than the running s
 
 ## 🛠️ Build and Development
 
-Requires the **.NET 10 SDK** to build. Built against `Jellyfin.Controller` `12.0.0-rc7`.
+Requires the **.NET 10 SDK** to build. Built against `Jellyfin.Controller` `12.4.0`.
 
 ### Restore Dependencies
 ```bash
