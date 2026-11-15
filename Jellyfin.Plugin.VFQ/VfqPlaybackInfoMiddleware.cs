@@ -82,7 +82,8 @@ public class VfqPlaybackInfoMiddleware
             memoryStream.Seek(0, SeekOrigin.Begin);
 
             if (context.Response.ContentType?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true
-                && context.Response.StatusCode == 200)
+                && context.Response.StatusCode == 200
+                && !IsUserDisabled(context, config))
             {
                 try
                 {
@@ -110,6 +111,33 @@ public class VfqPlaybackInfoMiddleware
             context.Response.Body = originalBodyStream;
             context.Request.Headers.AcceptEncoding = originalAcceptEncoding;
         }
+    }
+
+    /// <summary>
+    /// Resolves the user the PlaybackInfo was built for the same way Jellyfin does:
+    /// the <c>userId</c> query parameter, else the authenticated user. Authentication
+    /// runs downstream of this middleware, so the claim is only set after <c>_next</c>.
+    /// </summary>
+    private bool IsUserDisabled(HttpContext context, Configuration.PluginConfiguration config)
+    {
+        if (config.DisabledUserIds.Length == 0)
+        {
+            return false;
+        }
+
+        var raw = context.Request.Query["userId"].ToString();
+        if (string.IsNullOrEmpty(raw))
+        {
+            raw = context.User.FindFirst("Jellyfin-UserId")?.Value;
+        }
+
+        if (!Guid.TryParse(raw, out var userId) || !config.DisabledUserIds.Contains(userId))
+        {
+            return false;
+        }
+
+        _logger.LogDebug("VFQ Auto Selector: skipping PlaybackInfo for disabled user {UserId}", userId);
+        return true;
     }
 
     private bool PatchMediaSources(JsonNode root)

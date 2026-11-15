@@ -29,6 +29,7 @@ If multiple matching VFQ tracks exist, it selects the highest quality track base
 - **Automatic Selection:** Scans audio track metadata server-side to instantly select the right track on playback start.
 - **Robust Keyword Detection:** Matches standard tags: `VFQ`, `FR-CA`, `FRCA`, `Québécois`, `Quebecois`, `QC`, `Canadien`.
 - **Quality-Based Ranking:** Intelligently picks higher channel counts (e.g., 5.1/7.1 over Stereo) and preferred codecs.
+- **Per-User Opt-Out:** Uncheck a user on the plugin page to skip VFQ for them; they get Jellyfin's default, i.e. their own preferred audio language.
 - **Client Agnostic:** Intercepts Jellyfin's server-side playback info API, meaning it works out-of-the-box on Android TV, web, iOS, Apple TV, and Roku.
 
 ---

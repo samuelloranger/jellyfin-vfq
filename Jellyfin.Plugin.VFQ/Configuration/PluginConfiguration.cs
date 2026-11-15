@@ -1,3 +1,4 @@
+using System;
 using MediaBrowser.Model.Plugins;
 
 namespace Jellyfin.Plugin.VFQ.Configuration;
@@ -26,4 +27,10 @@ public class PluginConfiguration : BasePluginConfiguration
     /// (most channels, best codec) when multiple VFQ tracks exist.
     /// </summary>
     public bool PreferHighestQuality { get; set; }
+
+    /// <summary>
+    /// Gets or sets the users VFQ selection is skipped for. Jellyfin's own default
+    /// (their preferred audio language, else the file's default track) applies to them.
+    /// </summary>
+    public Guid[] DisabledUserIds { get; set; } = Array.Empty<Guid>();
 }
