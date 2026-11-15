@@ -104,9 +104,13 @@
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         config.EnableAutoSelect = document.querySelector('#EnableAutoSelect').checked;
                         config.PreferHighestQuality = document.querySelector('#PreferHighestQuality').checked;
-                        config.DisabledUserIds = Array.prototype.filter
-                            .call(document.querySelectorAll('#VfqUsers input'), function (input) { return !input.checked; })
-                            .map(function (input) { return input.dataset.userId; });
+                        // Keep the stored list if the user list never rendered, or saving would re-enable everyone.
+                        var userInputs = document.querySelectorAll('#VfqUsers input');
+                        if (userInputs.length > 0) {
+                            config.DisabledUserIds = Array.prototype.filter
+                                .call(userInputs, function (input) { return !input.checked; })
+                                .map(function (input) { return input.dataset.userId; });
+                        }
                         ApiClient.updatePluginConfiguration(pluginId, config).then(function () {
                             Dashboard.processPluginConfigurationUpdateResult();
                         });

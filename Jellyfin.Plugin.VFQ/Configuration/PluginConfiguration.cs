@@ -31,6 +31,7 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>
     /// Gets or sets the users VFQ selection is skipped for. Jellyfin's own default
     /// (their preferred audio language, else the file's default track) applies to them.
+    /// Never null: a posted <c>null</c> becomes empty so playback requests cannot throw.
     /// </summary>
-    public Guid[] DisabledUserIds { get; set; } = Array.Empty<Guid>();
+    public Guid[] DisabledUserIds { get; set => field = value ?? []; } = [];
 }
