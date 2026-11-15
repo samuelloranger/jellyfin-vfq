@@ -4,7 +4,7 @@
 `Jellyfin.Plugin.VFQ/` contains the only code project in this repo. Core plugin entrypoints live at the project root: `Plugin.cs`, `PluginServiceRegistrator.cs`, `VfqStartupFilter.cs`, `VfqPlaybackInfoMiddleware.cs`, and `VfqAudioSelectorService.cs`. Configuration types and the embedded admin page live under `Jellyfin.Plugin.VFQ/Configuration/`. Repository-level metadata lives in `Directory.Build.props`, `build.yaml`, and `manifest.json`. CI release automation is defined in `.github/workflows/release.yml`.
 
 ## Build, Test, and Development Commands
-Use the .NET 10 SDK; CI builds with `10.0.x`. The plugin targets `net10.0` and builds against `Jellyfin.Controller` / `Jellyfin.Model` `12.0.0-rc7` (Jellyfin 12). The 2.x release line is Jellyfin 12 only; Jellyfin 10.11 support ended at 1.0.5.0.
+Use the .NET 10 SDK; CI builds with `10.0.x`. The plugin targets `net10.0` and builds against `Jellyfin.Controller` / `Jellyfin.Model` `12.4.0` (Jellyfin 12). The 2.x release line is Jellyfin 12 only; Jellyfin 10.11 support ended at 1.0.5.0.
 
 Build and release are performed by the GitHub pipeline defined in `.github/workflows/release.yml`. Prefer pushing to `main` and letting CI produce the release artifacts when local .NET 10 tooling is unavailable.
 

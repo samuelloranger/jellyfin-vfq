@@ -36,6 +36,14 @@
                         </div>
                     </div>
 
+                    <h3>Users</h3>
+                    <p class="fieldDescription">
+                        VFQ selection applies only to checked users. Unchecked users get Jellyfin's own
+                        default: their preferred audio language (Settings &gt; Playback), otherwise the
+                        file's default track.
+                    </p>
+                    <div id="VfqUsers" style="margin-bottom: 2em;"></div>
+
                     <h3>Detected Keywords</h3>
                     <p style="color: #999; margin-bottom: 1em;">
                         The plugin identifies VFQ tracks by looking for these keywords in audio track titles
@@ -61,11 +69,32 @@
         <script type="text/javascript">
             var pluginId = '4a7f5452-e36b-4c5d-bd87-cd4cd3f5b4dd';
 
+            // Guids may come back with or without dashes depending on the serializer.
+            function normalizeId(id) {
+                return String(id).replace(/-/g, '').toLowerCase();
+            }
+
             document.querySelector('#VfqAutoSelectorConfigPage')
                 .addEventListener('pageshow', function () {
-                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                    Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getUsers()]).then(function (results) {
+                        var config = results[0];
+                        var disabled = (config.DisabledUserIds || []).map(normalizeId);
                         document.querySelector('#EnableAutoSelect').checked = config.EnableAutoSelect;
                         document.querySelector('#PreferHighestQuality').checked = config.PreferHighestQuality;
+
+                        var container = document.querySelector('#VfqUsers');
+                        container.innerHTML = '';
+                        results[1].forEach(function (user) {
+                            // Static markup only; the user name goes in via textContent.
+                            var row = document.createElement('div');
+                            row.className = 'checkboxContainer';
+                            row.innerHTML = '<label><input is="emby-checkbox" type="checkbox" /><span></span></label>';
+                            var checkbox = row.querySelector('input');
+                            checkbox.dataset.userId = user.Id;
+                            checkbox.checked = disabled.indexOf(normalizeId(user.Id)) === -1;
+                            row.querySelector('span').textContent = user.Name;
+                            container.appendChild(row);
+                        });
                     });
                 });
 
@@ -75,6 +104,13 @@
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         config.EnableAutoSelect = document.querySelector('#EnableAutoSelect').checked;
                         config.PreferHighestQuality = document.querySelector('#PreferHighestQuality').checked;
+                        // Keep the stored list if the user list never rendered, or saving would re-enable everyone.
+                        var userInputs = document.querySelectorAll('#VfqUsers input');
+                        if (userInputs.length > 0) {
+                            config.DisabledUserIds = Array.prototype.filter
+                                .call(userInputs, function (input) { return !input.checked; })
+                                .map(function (input) { return input.dataset.userId; });
+                        }
                         ApiClient.updatePluginConfiguration(pluginId, config).then(function () {
                             Dashboard.processPluginConfigurationUpdateResult();
                         });

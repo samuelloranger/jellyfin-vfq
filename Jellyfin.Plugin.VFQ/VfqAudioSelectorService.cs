@@ -85,7 +85,7 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
             }
 
             var session = e.Session;
-            if (session is null)
+            if (session is null || config.DisabledUserIds.Contains(session.UserId))
             {
                 return;
             }

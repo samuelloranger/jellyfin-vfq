@@ -230,6 +230,31 @@ set_enabled true
 assert_index 2 "$(curl -s "$BASE/Items/${ITEM_ID}/PlaybackInfo?userId=${USER_ID}" -H "$TAUTH" | default_index)" \
   "plugin re-enabled"
 
+# Per-user opt-out. Without userId in the query the middleware must fall back to
+# the authenticated user's claim, which is only populated after authentication runs.
+[ "$(api -X POST "$BASE/Plugins/${PLUGIN_GUID}/Configuration" -H "$TAUTH" \
+     -H 'Content-Type: application/json' \
+     -d "{\"EnableAutoSelect\":true,\"PreferHighestQuality\":true,\"DisabledUserIds\":[\"${USER_ID}\"]}")" = 204 ] \
+  || fail "updating the plugin configuration failed"
+assert_index 1 "$(curl -s "$BASE/Items/${ITEM_ID}/PlaybackInfo?userId=${USER_ID}" -H "$TAUTH" | default_index)" \
+  "user disabled, userId query"
+assert_index 1 "$(curl -s -X POST "$BASE/Items/${ITEM_ID}/PlaybackInfo" \
+  -H "$TAUTH" -H 'Content-Type: application/json' -d '{}' | default_index)" \
+  "user disabled, token only"
+
+set_enabled true
+assert_index 2 "$(curl -s -X POST "$BASE/Items/${ITEM_ID}/PlaybackInfo" \
+  -H "$TAUTH" -H 'Content-Type: application/json' -d '{}' | default_index)" \
+  "user re-enabled, token only"
+
+# A null list must not break PlaybackInfo for everyone.
+[ "$(api -X POST "$BASE/Plugins/${PLUGIN_GUID}/Configuration" -H "$TAUTH" \
+     -H 'Content-Type: application/json' \
+     -d '{"EnableAutoSelect":true,"PreferHighestQuality":true,"DisabledUserIds":null}')" = 204 ] \
+  || fail "updating the plugin configuration failed"
+assert_index 2 "$(curl -s "$BASE/Items/${ITEM_ID}/PlaybackInfo?userId=${USER_ID}" -H "$TAUTH" | default_index)" \
+  "null DisabledUserIds"
+
 log "Checking the config page is served"
 [ "$(api "$BASE/web/ConfigurationPage?name=VFQ%20Auto%20Selector" -H "$TAUTH")" = 200 ] \
   || fail "the plugin configuration page is not being served"
