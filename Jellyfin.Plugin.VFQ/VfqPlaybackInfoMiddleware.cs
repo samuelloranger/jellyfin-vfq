@@ -22,18 +22,6 @@ public class VfqPlaybackInfoMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<VfqPlaybackInfoMiddleware> _logger;
 
-    private static readonly Dictionary<string, int> CodecRank = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["truehd"] = 6,
-        ["dts-hd ma"] = 5,
-        ["dts-hd"] = 5,
-        ["flac"] = 4,
-        ["eac3"] = 3,
-        ["dts"] = 2,
-        ["ac3"] = 1,
-        ["aac"] = 0,
-    };
-
     /// <summary>
     /// Initializes a new instance of the <see cref="VfqPlaybackInfoMiddleware"/> class.
     /// </summary>
@@ -205,7 +193,7 @@ public class VfqPlaybackInfoMiddleware
 
             var best = preferQuality && vfqTracks.Count > 1
                 ? vfqTracks
-                    .OrderByDescending(t => GetCodecRankValue(t.Codec, t.Profile))
+                    .OrderByDescending(t => VfqTrackMatcher.CodecRank(t.Codec, t.Profile))
                     .ThenByDescending(t => t.Channels)
                     .First()
                 : vfqTracks.First();
@@ -279,20 +267,5 @@ public class VfqPlaybackInfoMiddleware
         }
 
         return name;
-    }
-
-    private static int GetCodecRankValue(string? codec, string? profile)
-    {
-        if (!string.IsNullOrEmpty(profile) && CodecRank.TryGetValue(profile, out var profileRank))
-        {
-            return profileRank;
-        }
-
-        if (!string.IsNullOrEmpty(codec) && CodecRank.TryGetValue(codec, out var codecRank))
-        {
-            return codecRank;
-        }
-
-        return -1;
     }
 }
