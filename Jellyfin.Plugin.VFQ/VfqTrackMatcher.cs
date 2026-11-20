@@ -8,10 +8,22 @@ using MediaBrowser.Model.Entities;
 namespace Jellyfin.Plugin.VFQ;
 
 /// <summary>
-/// Shared VFQ track detection helpers used by both playback interception paths.
+/// Shared VFQ track detection and ranking helpers used by both playback interception paths.
 /// </summary>
 internal static class VfqTrackMatcher
 {
+    private static readonly Dictionary<string, int> CodecRanks = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["truehd"] = 6,
+        ["dts-hd ma"] = 5,
+        ["dts-hd"] = 5,
+        ["flac"] = 4,
+        ["eac3"] = 3,
+        ["dts"] = 2,
+        ["ac3"] = 1,
+        ["aac"] = 0,
+    };
+
     private static readonly string[] VfqKeywords =
     {
         "vfq",
@@ -50,6 +62,25 @@ internal static class VfqTrackMatcher
 
     public static bool IsVfqTrack(string? title, string? displayTitle, string? language)
         => IsVfqText(title) || IsVfqText(displayTitle) || IsVfqText(language);
+
+    /// <summary>
+    /// Quality rank of an audio track, higher is better. The profile wins over the codec
+    /// so a DTS-HD MA track (codec <c>dts</c>) outranks plain DTS. Unknown codecs rank -1.
+    /// </summary>
+    public static int CodecRank(string? codec, string? profile)
+    {
+        if (!string.IsNullOrEmpty(profile) && CodecRanks.TryGetValue(profile, out var profileRank))
+        {
+            return profileRank;
+        }
+
+        if (!string.IsNullOrEmpty(codec) && CodecRanks.TryGetValue(codec, out var codecRank))
+        {
+            return codecRank;
+        }
+
+        return -1;
+    }
 
     private static bool IsVfqText(string? value)
     {

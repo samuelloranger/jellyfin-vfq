@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Session;
-using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Session;
 using Microsoft.Extensions.Hosting;
@@ -27,18 +26,6 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
     private readonly ISessionManager _sessionManager;
     private readonly IMediaSourceManager _mediaSourceManager;
     private readonly ILogger<VfqAudioSelectorService> _logger;
-
-    private static readonly Dictionary<string, int> CodecRank = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["truehd"] = 6,
-        ["dts-hd ma"] = 5,
-        ["dts-hd"] = 5,
-        ["flac"] = 4,
-        ["eac3"] = 3,
-        ["dts"] = 2,
-        ["ac3"] = 1,
-        ["aac"] = 0,
-    };
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VfqAudioSelectorService"/> class.
@@ -159,80 +146,17 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
         }
     }
 
-    /// <summary>
-    /// Applies VFQ default to a MediaSourceInfo by overriding DefaultAudioStreamIndex.
-    /// Called from the patched SetDefaultAudioAndSubtitleStreamIndices.
-    /// </summary>
-    internal static void ApplyVfqDefault(MediaSourceInfo source, ILogger logger)
-    {
-        var config = Plugin.Instance?.Configuration;
-        if (config is null || !config.EnableAutoSelect)
-        {
-            return;
-        }
-
-        var audioStreams = source.MediaStreams?
-            .Where(s => s.Type == MediaStreamType.Audio)
-            .ToList();
-
-        if (audioStreams is null || audioStreams.Count == 0)
-        {
-            return;
-        }
-
-        var vfqTracks = audioStreams.Where(VfqTrackMatcher.IsVfqTrack).ToList();
-        if (vfqTracks.Count == 0)
-        {
-            return;
-        }
-
-        var bestTrack = PickBestTrack(vfqTracks, config.PreferHighestQuality);
-
-        if (source.DefaultAudioStreamIndex == bestTrack.Index)
-        {
-            return;
-        }
-
-        logger.LogInformation(
-            "VFQ Auto Selector: overriding default audio from {Old} to {New} ('{Title}', {Codec} {Channels}ch)",
-            source.DefaultAudioStreamIndex,
-            bestTrack.Index,
-            bestTrack.Title ?? bestTrack.DisplayTitle,
-            bestTrack.Codec,
-            bestTrack.Channels);
-
-        source.DefaultAudioStreamIndex = bestTrack.Index;
-    }
-
     private static MediaStream PickBestTrack(List<MediaStream> vfqTracks, bool preferQuality)
     {
         if (preferQuality && vfqTracks.Count > 1)
         {
             return vfqTracks
-                .OrderByDescending(GetCodecRank)
+                .OrderByDescending(s => VfqTrackMatcher.CodecRank(s.Codec, s.Profile))
                 .ThenByDescending(s => s.Channels ?? 0)
                 .First();
         }
 
         return vfqTracks.First();
-    }
-
-    private static int GetCodecRank(MediaStream stream)
-    {
-        var codec = stream.Codec ?? string.Empty;
-        var profile = stream.Profile ?? string.Empty;
-
-        if (!string.IsNullOrEmpty(profile) && CodecRank.TryGetValue(profile, out var profileRank))
-        {
-            return profileRank;
-        }
-
-        if (CodecRank.TryGetValue(codec, out var codecRank))
-        {
-            return codecRank;
-        }
-
-        return -1;
     }
 
     /// <inheritdoc />
