@@ -13,7 +13,7 @@ Build and release are performed by the GitHub pipeline defined in `.github/workf
 - `dotnet build Jellyfin.Plugin.VFQ.sln -c Release` matches the release workflow output.
 - `dotnet clean Jellyfin.Plugin.VFQ.sln` clears previous build artifacts.
 
-CI packages `Jellyfin.Plugin.VFQ.dll` into a zip and updates `manifest.json` plus `Directory.Build.props` on pushes to `main`. New manifest entries are written with `targetAbi: 12.0.0.0`. The release line (`MAJOR.MINOR`) is read from `Directory.Build.props`; CI only bumps the patch within that line, so starting a new line means editing that file.
+Before packaging, the release workflow runs the unit tests and `scripts/smoke-test.sh` against the pinned Jellyfin image; either failing stops the release before anything is tagged. CI packages `Jellyfin.Plugin.VFQ.dll` into a zip and updates `manifest.json` plus `Directory.Build.props` on pushes to `main`. New manifest entries are written with `targetAbi: 12.0.0.0`. The release line (`MAJOR.MINOR`) is read from `Directory.Build.props`; CI only bumps the patch within that line, so starting a new line means editing that file.
 
 ### Jellyfin version pin
 

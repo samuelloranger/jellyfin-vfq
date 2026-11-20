@@ -66,6 +66,25 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release
 
+      - name: Test
+        run: dotnet test --configuration Release --no-build
+
+      # The smoke test builds a two-track test file with the host ffmpeg, which is
+      # no longer preinstalled on the runner image.
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      # Nothing below runs unless the built plugin loads in the Jellyfin it is
+      # released against and picks the VFQ track. A build cannot catch a Jellyfin
+      # API that is only bound at plugin load, which is how 1.0.5.0 broke.
+      - name: Smoke test against the pinned Jellyfin
+        run: |
+          PINNED=$(grep -oP '<JellyfinVersion[^>]*>\K[^<]+' Jellyfin.Plugin.VFQ/Jellyfin.Plugin.VFQ.csproj)
+          eval "$(scripts/resolve-jellyfin-version.py --requested "$PINNED")"
+          ./scripts/smoke-test.sh "$docker_tag"
+
       - name: Create plugin zip
         id: zip
         run: |
