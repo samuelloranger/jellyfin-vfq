@@ -255,6 +255,65 @@ assert_index 2 "$(curl -s -X POST "$BASE/Items/${ITEM_ID}/PlaybackInfo" \
 assert_index 2 "$(curl -s "$BASE/Items/${ITEM_ID}/PlaybackInfo?userId=${USER_ID}" -H "$TAUTH" | default_index)" \
   "null DisabledUserIds"
 
+log "Asserting the stream URL plays the announced track"
+
+# With a device profile that cannot direct play, Jellyfin answers with a stream URL
+# whose AudioStreamIndex is what the client actually hears. DefaultAudioStreamIndex
+# alone can say VFQ while that URL still carries the file's default track.
+TRANSCODE_PROFILE='"DeviceProfile":{"MaxStreamingBitrate":120000000,"DirectPlayProfiles":[],"TranscodingProfiles":[{"Container":"ts","Type":"Video","VideoCodec":"h264","AudioCodec":"aac","Protocol":"hls","Context":"Streaming"}],"CodecProfiles":[],"SubtitleProfiles":[]}'
+
+# Prints "<DefaultAudioStreamIndex> <AudioStreamIndex in TranscodingUrl>".
+stream_indexes() {
+  python3 -c '
+import json, re, sys
+d = json.load(sys.stdin)
+src = (d.get("MediaSources") or d.get("mediaSources"))[0]
+url = src.get("TranscodingUrl") or src.get("transcodingUrl") or ""
+m = re.search(r"[?&]AudioStreamIndex=(\d+)", url, re.I)
+print(src.get("DefaultAudioStreamIndex", src.get("defaultAudioStreamIndex")), m.group(1) if m else "none")'
+}
+
+assert_stream() {
+  local want="$1" got="$2" what="$3"
+  if [ "$got" = "$want $want" ]; then
+    printf '  ok   %-34s default and stream URL = %s\n' "$what" "$want"
+  else
+    fail "$what: expected default and stream URL audio $want, got (default, URL) = ($got)"
+  fi
+}
+
+post_transcode() {
+  curl -s -X POST "$BASE/Items/${ITEM_ID}/PlaybackInfo" -H "$TAUTH" \
+    -H 'Content-Type: application/json' -d "{$1${TRANSCODE_PROFILE}}" | stream_indexes
+}
+
+MEDIA_SOURCE_ID=$(curl -s "$BASE/Items/${ITEM_ID}/PlaybackInfo?userId=${USER_ID}" -H "$TAUTH" \
+  | python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("MediaSources") or d["mediaSources"])[0]["Id"])')
+
+assert_stream 2 "$(post_transcode '')" "transcode, server picks"
+assert_stream 1 "$(post_transcode "\"AudioStreamIndex\":1,\"MediaSourceId\":\"${MEDIA_SOURCE_ID}\",")" \
+  "transcode, client picks English"
+
+# A client able to play the file itself gets no stream URL and picks the track from
+# the default, so pinning the track must not push it off direct play.
+DIRECT_PROFILE='"DeviceProfile":{"MaxStreamingBitrate":120000000,"DirectPlayProfiles":[{"Container":"mkv","Type":"Video","VideoCodec":"h264","AudioCodec":"aac"}],"TranscodingProfiles":[],"CodecProfiles":[],"SubtitleProfiles":[]}'
+GOT=$(curl -s -X POST "$BASE/Items/${ITEM_ID}/PlaybackInfo" -H "$TAUTH" \
+  -H 'Content-Type: application/json' -d "{${DIRECT_PROFILE}}" | stream_indexes)
+[ "$GOT" = "2 none" ] || fail "direct play: expected default 2 and no stream URL, got (default, URL) = ($GOT)"
+printf '  ok   %-34s default = 2, no stream URL\n' "direct play, server picks"
+
+# The opt-out check now runs before the request reaches Jellyfin, so with only a
+# token it has to resolve the user itself.
+[ "$(api -X POST "$BASE/Plugins/${PLUGIN_GUID}/Configuration" -H "$TAUTH" \
+     -H 'Content-Type: application/json' \
+     -d "{\"EnableAutoSelect\":true,\"PreferHighestQuality\":true,\"DisabledUserIds\":[\"${USER_ID}\"]}")" = 204 ] \
+  || fail "updating the plugin configuration failed"
+assert_stream 1 "$(post_transcode '')" "transcode, user disabled, token only"
+
+set_enabled false
+assert_stream 1 "$(post_transcode '')" "transcode, plugin disabled"
+set_enabled true
+
 log "Checking the config page is served"
 [ "$(api "$BASE/web/ConfigurationPage?name=VFQ%20Auto%20Selector" -H "$TAUTH")" = 200 ] \
   || fail "the plugin configuration page is not being served"

@@ -14,7 +14,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     /// <inheritdoc />
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost appHost)
     {
-        // Primary: middleware intercepts PlaybackInfo responses for ALL clients.
+        // Primary: middleware pins VFQ on PlaybackInfo requests for ALL clients.
         serviceCollection.AddSingleton<IStartupFilter, VfqStartupFilter>();
 
         // Fallback: hosted service sends SetAudioStreamIndex on PlaybackStart.

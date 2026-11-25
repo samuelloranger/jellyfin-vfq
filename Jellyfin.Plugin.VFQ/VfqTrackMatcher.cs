@@ -64,6 +64,27 @@ internal static class VfqTrackMatcher
         => IsVfqText(title) || IsVfqText(displayTitle) || IsVfqText(language);
 
     /// <summary>
+    /// The VFQ audio track to play among <paramref name="streams"/>, or null when there is none.
+    /// With <paramref name="preferQuality"/> the best codec wins, then the most channels;
+    /// otherwise the first VFQ track does.
+    /// </summary>
+    public static MediaStream? PickBest(IEnumerable<MediaStream> streams, bool preferQuality)
+    {
+        var vfqTracks = streams.Where(s => s.Type == MediaStreamType.Audio && IsVfqTrack(s)).ToList();
+        if (vfqTracks.Count == 0)
+        {
+            return null;
+        }
+
+        return preferQuality && vfqTracks.Count > 1
+            ? vfqTracks
+                .OrderByDescending(s => CodecRank(s.Codec, s.Profile))
+                .ThenByDescending(s => s.Channels ?? 0)
+                .First()
+            : vfqTracks[0];
+    }
+
+    /// <summary>
     /// Quality rank of an audio track, higher is better. The profile wins over the codec
     /// so a DTS-HD MA track (codec <c>dts</c>) outranks plain DTS. Unknown codecs rank -1.
     /// </summary>
