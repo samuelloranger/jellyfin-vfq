@@ -1,6 +1,9 @@
 using System;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace Jellyfin.Plugin.VFQ;
 
@@ -47,6 +50,26 @@ internal sealed record VfqPlaybackRequest(bool HasExplicitAudio, string? MediaSo
             && string.Equals(segments[last], "PlaybackInfo", StringComparison.OrdinalIgnoreCase)
             && string.Equals(segments[last - 2], "Items", StringComparison.OrdinalIgnoreCase)
             && Guid.TryParse(segments[last - 1], out itemId);
+    }
+
+    /// <summary>
+    /// Returns <paramref name="query"/> with <c>audioStreamIndex</c> set, and <c>mediaSourceId</c>
+    /// too when one is given. Keys already there are replaced rather than repeated: model
+    /// binding reads the first value, so an empty <c>audioStreamIndex=</c> left in front would
+    /// win and drop the pin.
+    /// </summary>
+    public static string PinQuery(string? query, int audioStreamIndex, string? mediaSourceId)
+    {
+        var values = QueryHelpers.ParseQuery(query);
+        values.Remove("audioStreamIndex");
+        values["audioStreamIndex"] = audioStreamIndex.ToString(CultureInfo.InvariantCulture);
+        if (mediaSourceId is not null)
+        {
+            values.Remove("mediaSourceId");
+            values["mediaSourceId"] = mediaSourceId;
+        }
+
+        return QueryString.Create(values).Value ?? string.Empty;
     }
 
     private static (bool HasAudio, string? MediaSourceId, string? UserId) ReadBody(string? body)

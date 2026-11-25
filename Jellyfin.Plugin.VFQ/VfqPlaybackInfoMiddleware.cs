@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -26,6 +25,11 @@ namespace Jellyfin.Plugin.VFQ;
 /// </summary>
 public class VfqPlaybackInfoMiddleware
 {
+    /// <summary>
+    /// The largest PlaybackInfo body inspected. A device profile is a few tens of KB.
+    /// </summary>
+    private const long MaxBodyBytes = 1024 * 1024;
+
     private readonly RequestDelegate _next;
     private readonly ILogger<VfqPlaybackInfoMiddleware> _logger;
 
@@ -60,6 +64,13 @@ public class VfqPlaybackInfoMiddleware
         }
 
         var request = await ReadRequestAsync(context).ConfigureAwait(false);
+        if (request is null)
+        {
+            // A body too large or unreadable to inspect: let Jellyfin handle it untouched.
+            await _next(context).ConfigureAwait(false);
+            return;
+        }
+
         if (await IsUserDisabledAsync(context, config, request).ConfigureAwait(false))
         {
             await _next(context).ConfigureAwait(false);
@@ -126,16 +137,39 @@ public class VfqPlaybackInfoMiddleware
         }
     }
 
-    private static async Task<VfqPlaybackRequest> ReadRequestAsync(HttpContext context)
+    /// <summary>
+    /// Reads the request, or returns null when its body can't be inspected safely. This runs
+    /// before authentication, so only a body of a declared, small size is buffered.
+    /// </summary>
+    private static async Task<VfqPlaybackRequest?> ReadRequestAsync(HttpContext context)
     {
         string? body = null;
         if (HttpMethods.IsPost(context.Request.Method))
         {
-            // Buffer the body so Jellyfin's model binding can read it again after us.
-            context.Request.EnableBuffering();
-            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true);
-            body = await reader.ReadToEndAsync(context.RequestAborted).ConfigureAwait(false);
-            context.Request.Body.Position = 0;
+            var length = context.Request.ContentLength;
+            if (length is null ? context.Request.Headers.TransferEncoding.Count > 0 : length > MaxBodyBytes)
+            {
+                return null;
+            }
+
+            if (length > 0)
+            {
+                // Buffer the body so Jellyfin's model binding can read it again after us.
+                context.Request.EnableBuffering();
+                try
+                {
+                    using var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true);
+                    body = await reader.ReadToEndAsync(context.RequestAborted).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException or BadHttpRequestException)
+                {
+                    return null;
+                }
+                finally
+                {
+                    context.Request.Body.Position = 0;
+                }
+            }
         }
 
         var query = context.Request.Query;
@@ -224,13 +258,10 @@ public class VfqPlaybackInfoMiddleware
             }
 
             // Query values take precedence over the posted body in Jellyfin's PlaybackInfo.
-            var query = context.Request.QueryString.Add("audioStreamIndex", best.Index.ToString(CultureInfo.InvariantCulture));
-            if (request.MediaSourceId is null)
-            {
-                query = query.Add("mediaSourceId", source.Id);
-            }
-
-            context.Request.QueryString = query;
+            context.Request.QueryString = new QueryString(VfqPlaybackRequest.PinQuery(
+                context.Request.QueryString.Value,
+                best.Index,
+                request.MediaSourceId is null ? source.Id : null));
 
             _logger.LogInformation(
                 "VFQ Auto Selector: requesting '{Title}' (index {Index}, {Codec} {Channels}ch) for '{Name}'",

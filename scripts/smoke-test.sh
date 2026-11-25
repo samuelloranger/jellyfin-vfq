@@ -294,6 +294,22 @@ assert_stream 2 "$(post_transcode '')" "transcode, server picks"
 assert_stream 1 "$(post_transcode "\"AudioStreamIndex\":1,\"MediaSourceId\":\"${MEDIA_SOURCE_ID}\",")" \
   "transcode, client picks English"
 
+# A client able to play the file itself gets no stream URL and picks the track from
+# the default, so pinning the track must not push it off direct play.
+DIRECT_PROFILE='"DeviceProfile":{"MaxStreamingBitrate":120000000,"DirectPlayProfiles":[{"Container":"mkv","Type":"Video","VideoCodec":"h264","AudioCodec":"aac"}],"TranscodingProfiles":[],"CodecProfiles":[],"SubtitleProfiles":[]}'
+GOT=$(curl -s -X POST "$BASE/Items/${ITEM_ID}/PlaybackInfo" -H "$TAUTH" \
+  -H 'Content-Type: application/json' -d "{${DIRECT_PROFILE}}" | stream_indexes)
+[ "$GOT" = "2 none" ] || fail "direct play: expected default 2 and no stream URL, got (default, URL) = ($GOT)"
+printf '  ok   %-34s default = 2, no stream URL\n' "direct play, server picks"
+
+# The opt-out check now runs before the request reaches Jellyfin, so with only a
+# token it has to resolve the user itself.
+[ "$(api -X POST "$BASE/Plugins/${PLUGIN_GUID}/Configuration" -H "$TAUTH" \
+     -H 'Content-Type: application/json' \
+     -d "{\"EnableAutoSelect\":true,\"PreferHighestQuality\":true,\"DisabledUserIds\":[\"${USER_ID}\"]}")" = 204 ] \
+  || fail "updating the plugin configuration failed"
+assert_stream 1 "$(post_transcode '')" "transcode, user disabled, token only"
+
 set_enabled false
 assert_stream 1 "$(post_transcode '')" "transcode, plugin disabled"
 set_enabled true

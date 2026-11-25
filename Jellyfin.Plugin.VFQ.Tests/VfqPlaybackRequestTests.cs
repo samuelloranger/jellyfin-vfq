@@ -59,6 +59,45 @@ public class VfqPlaybackRequestTests
         Assert.False(VfqPlaybackRequest.Parse(null, null, null, body).HasExplicitAudio);
     }
 
+    [Fact]
+    public void PinQueryAddsTheTrackAndSource()
+    {
+        var query = Parse(VfqPlaybackRequest.PinQuery("?userId=u", 3, "src"));
+
+        Assert.Equal(3, query.Count);
+        Assert.Equal("u", query["userId"]);
+        Assert.Equal("3", query["audioStreamIndex"]);
+        Assert.Equal("src", query["mediaSourceId"]);
+    }
+
+    [Fact]
+    public void PinQueryReplacesEmptyKeysInsteadOfRepeatingThem()
+    {
+        var query = Parse(VfqPlaybackRequest.PinQuery("?AudioStreamIndex=&mediaSourceId=&userId=u", 3, "src"));
+
+        Assert.Equal(3, query.Count);
+        Assert.Equal(new[] { "3" }, query["audioStreamIndex"].ToArray());
+        Assert.Equal(new[] { "src" }, query["mediaSourceId"].ToArray());
+    }
+
+    [Fact]
+    public void PinQueryKeepsTheClientsSourceWhenNoneIsGiven()
+    {
+        var query = Parse(VfqPlaybackRequest.PinQuery("?mediaSourceId=mine", 2, null));
+
+        Assert.Equal("mine", query["mediaSourceId"]);
+        Assert.Equal("2", query["audioStreamIndex"]);
+    }
+
+    [Fact]
+    public void PinQueryWorksOnAnEmptyQuery()
+    {
+        Assert.Equal("?audioStreamIndex=1", VfqPlaybackRequest.PinQuery(null, 1, null));
+    }
+
+    private static Dictionary<string, Microsoft.Extensions.Primitives.StringValues> Parse(string query)
+        => Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(query);
+
     [Theory]
     [InlineData("/Items/5f865dd7-d8df-b127-469f-9271e7a3a6a3/PlaybackInfo")]
     [InlineData("/jellyfin/items/5f865dd7d8dfb127469f9271e7a3a6a3/playbackinfo")]
