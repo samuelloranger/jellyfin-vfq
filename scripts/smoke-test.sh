@@ -255,6 +255,49 @@ assert_index 2 "$(curl -s -X POST "$BASE/Items/${ITEM_ID}/PlaybackInfo" \
 assert_index 2 "$(curl -s "$BASE/Items/${ITEM_ID}/PlaybackInfo?userId=${USER_ID}" -H "$TAUTH" | default_index)" \
   "null DisabledUserIds"
 
+log "Asserting the stream URL plays the announced track"
+
+# With a device profile that cannot direct play, Jellyfin answers with a stream URL
+# whose AudioStreamIndex is what the client actually hears. DefaultAudioStreamIndex
+# alone can say VFQ while that URL still carries the file's default track.
+TRANSCODE_PROFILE='"DeviceProfile":{"MaxStreamingBitrate":120000000,"DirectPlayProfiles":[],"TranscodingProfiles":[{"Container":"ts","Type":"Video","VideoCodec":"h264","AudioCodec":"aac","Protocol":"hls","Context":"Streaming"}],"CodecProfiles":[],"SubtitleProfiles":[]}'
+
+# Prints "<DefaultAudioStreamIndex> <AudioStreamIndex in TranscodingUrl>".
+stream_indexes() {
+  python3 -c '
+import json, re, sys
+d = json.load(sys.stdin)
+src = (d.get("MediaSources") or d.get("mediaSources"))[0]
+url = src.get("TranscodingUrl") or src.get("transcodingUrl") or ""
+m = re.search(r"[?&]AudioStreamIndex=(\d+)", url, re.I)
+print(src.get("DefaultAudioStreamIndex", src.get("defaultAudioStreamIndex")), m.group(1) if m else "none")'
+}
+
+assert_stream() {
+  local want="$1" got="$2" what="$3"
+  if [ "$got" = "$want $want" ]; then
+    printf '  ok   %-34s default and stream URL = %s\n' "$what" "$want"
+  else
+    fail "$what: expected default and stream URL audio $want, got (default, URL) = ($got)"
+  fi
+}
+
+post_transcode() {
+  curl -s -X POST "$BASE/Items/${ITEM_ID}/PlaybackInfo" -H "$TAUTH" \
+    -H 'Content-Type: application/json' -d "{$1${TRANSCODE_PROFILE}}" | stream_indexes
+}
+
+MEDIA_SOURCE_ID=$(curl -s "$BASE/Items/${ITEM_ID}/PlaybackInfo?userId=${USER_ID}" -H "$TAUTH" \
+  | python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("MediaSources") or d["mediaSources"])[0]["Id"])')
+
+assert_stream 2 "$(post_transcode '')" "transcode, server picks"
+assert_stream 1 "$(post_transcode "\"AudioStreamIndex\":1,\"MediaSourceId\":\"${MEDIA_SOURCE_ID}\",")" \
+  "transcode, client picks English"
+
+set_enabled false
+assert_stream 1 "$(post_transcode '')" "transcode, plugin disabled"
+set_enabled true
+
 log "Checking the config page is served"
 [ "$(api "$BASE/web/ConfigurationPage?name=VFQ%20Auto%20Selector" -H "$TAUTH")" = 200 ] \
   || fail "the plugin configuration page is not being served"

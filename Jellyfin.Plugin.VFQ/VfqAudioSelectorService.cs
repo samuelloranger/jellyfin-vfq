@@ -19,7 +19,7 @@ namespace Jellyfin.Plugin.VFQ;
 /// <see cref="VfqPlaybackInfoMiddleware"/>, which rewrites the PlaybackInfo response
 /// before any client sees it. This service listens to <c>PlaybackStart</c> and, when the
 /// session did not end up on a VFQ track, sends a <c>SetAudioStreamIndex</c> command to
-/// the client session.
+/// the client session, unless the client picked that session's audio itself.
 /// </summary>
 public class VfqAudioSelectorService : IHostedService, IDisposable
 {
@@ -101,13 +101,19 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
                 return;
             }
 
-            var vfqTracks = audioStreams.Where(VfqTrackMatcher.IsVfqTrack).ToList();
-            if (vfqTracks.Count == 0)
+            var bestTrack = VfqTrackMatcher.PickBest(audioStreams, config.PreferHighestQuality);
+            if (bestTrack is null)
             {
                 return;
             }
 
-            var bestTrack = PickBestTrack(vfqTracks, config.PreferHighestQuality);
+            if (VfqExplicitAudioSessions.Shared.Contains(e.PlaySessionId, DateTime.UtcNow))
+            {
+                _logger.LogDebug(
+                    "VFQ Auto Selector: the client picked the audio of '{Name}' itself, leaving it",
+                    nowPlaying.Name);
+                return;
+            }
 
             var currentAudioIndex = session.PlayState?.AudioStreamIndex;
             if (currentAudioIndex == bestTrack.Index)
@@ -144,19 +150,6 @@ public class VfqAudioSelectorService : IHostedService, IDisposable
         {
             _logger.LogError(ex, "VFQ Auto Selector: error during playback start handling");
         }
-    }
-
-    private static MediaStream PickBestTrack(List<MediaStream> vfqTracks, bool preferQuality)
-    {
-        if (preferQuality && vfqTracks.Count > 1)
-        {
-            return vfqTracks
-                .OrderByDescending(s => VfqTrackMatcher.CodecRank(s.Codec, s.Profile))
-                .ThenByDescending(s => s.Channels ?? 0)
-                .First();
-        }
-
-        return vfqTracks.First();
     }
 
     /// <inheritdoc />
